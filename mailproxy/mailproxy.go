@@ -58,6 +58,9 @@ func makeConfig(user, provider, providerKey, authority, onionAuthority, authorit
 
 [Management]
   Enable = false
+
+[Debug]
+  SendDecoyTraffic = true
 `
 
 	upstreamProxy := `
