@@ -88,6 +88,7 @@ func New(address string, options *Options) (*Client, error) {
 	return c, nil
 }
 
+// RegisterAccountWithIdentityAndLinkKey registers an account on the registration server with the specified identity and link keys.
 func (c *Client) RegisterAccountWithIdentityAndLinkKey(user string, linkKey *ecdh.PublicKey, identityKey *ecdh.PublicKey) error {
 	formData := url.Values{
 		registration.VersionField:     {registration.Version},
@@ -106,6 +107,7 @@ func (c *Client) RegisterAccountWithIdentityAndLinkKey(user string, linkKey *ecd
 	return nil
 }
 
+// RegisterAccountWithLinkKey registers an account on the registration server with the specified link key.
 func (c *Client) RegisterAccountWithLinkKey(user string, linkKey *ecdh.PublicKey) error {
 	formData := url.Values{
 		registration.VersionField: {registration.Version},
