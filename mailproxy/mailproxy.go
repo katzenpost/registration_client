@@ -74,7 +74,7 @@ func makeConfig(providerKey *eddsa.PublicKey, authorityKey *eddsa.PublicKey, use
 // identity public key or an error upon failure. This function returns
 // the public keys so that they may be used with the Provider
 // account registration process.
-func GenerateConfig(user, provider, providerKey, authority, onionAuthority, authorityKey, dataDir, socksNet, socksAddr string, preferOnion bool) (*ecdh.PublicKey, *ecdh.PublicKey, error) {
+func GenerateConfig(user, provider, providerKey, authority, onionAuthority, authorityKey, dataDir, socksNet, socksAddr string, preferOnion bool, authorities []*vConfig.AuthorityPeer) (*ecdh.PublicKey, *ecdh.PublicKey, error) {
 	// Initialize the per-account directory.
 	user, err := precis.UsernameCaseMapped.String(user)
 	if err != nil {
@@ -105,7 +105,7 @@ func GenerateConfig(user, provider, providerKey, authority, onionAuthority, auth
 	pk.FromString(providerKey)
 	ak := new(eddsa.PublicKey)
 	ak.FromString(authorityKey)
-	cfg := makeConfig(pk, ak, user, provider, authority, onionAuthority, dataDir, socksNet, socksAddr, preferOnion, nil)
+	cfg := makeConfig(pk, ak, user, provider, authority, onionAuthority, dataDir, socksNet, socksAddr, preferOnion, authorities)
 	f, err := os.OpenFile(filepath.Join(dataDir, mailproxyConfigName), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return nil, nil, err
