@@ -19,13 +19,18 @@
 package mailproxy
 
 import (
+	"os"
 	"fmt"
-	"io/ioutil"
 	"path/filepath"
 
+	"github.com/BurntSushi/toml"
+	"github.com/katzenpost/core/pki"
 	"github.com/katzenpost/core/crypto/ecdh"
+	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/utils"
+	pConfig "github.com/katzenpost/mailproxy/config"
+	vConfig "github.com/katzenpost/authority/voting/server/config"
 	"golang.org/x/text/secure/precis"
 )
 
@@ -33,48 +38,34 @@ const (
 	mailproxyConfigName = "mailproxy.toml"
 )
 
-func makeConfig(user, provider, providerKey, authority, onionAuthority, authorityKey, dataDir, socksNet, socksAddr string, preferOnion bool) []byte {
-	configFormatStr := `
-[Proxy]
-  POP3Address = "127.0.0.1:2524"
-  SMTPAddress = "127.0.0.1:2525"
-  DataDir = "%s"
-
-[Logging]
-  Disable = false
-  Level = "NOTICE"
-
-[NonvotingAuthority]
-  [NonvotingAuthority.PlaygroundAuthority]
-    Address = "%s"
-    PublicKey = "%s"
-
-[[Account]]
-  User = "%s"
-  Provider = "%s"
-  ProviderKeyPin = "%s"
-  Authority = "PlaygroundAuthority"
-  InsecureKeyDiscovery = true
-
-[Management]
-  Enable = false
-`
-
-	upstreamProxy := `
-[UpstreamProxy]
-  PreferedTransports = [ "onion" ]
-  Type = "tor+socks5"
-  Network = "%s"
-  Address = "%s"
-`
-
-	if preferOnion {
-		output := []byte(fmt.Sprintf(configFormatStr, dataDir, onionAuthority, authorityKey, user, provider, providerKey))
-		output = append(output, []byte(fmt.Sprintf(upstreamProxy, socksNet, socksAddr))...)
-		return output
+func makeConfig(providerKey *eddsa.PublicKey, authorityKey *eddsa.PublicKey, user, provider, authority, onionAuthority, dataDir, socksNet, socksAddr string, preferOnion bool, authorities []*vConfig.AuthorityPeer) *pConfig.Config {
+	c := new(pConfig.Config)
+	c.Proxy = new(pConfig.Proxy)
+	c.Proxy.DataDir = dataDir
+	//XXX: select between voting/nonvoting
+	if len(authorities) == 0 {
+		c.NonvotingAuthority = make(map[string]*pConfig.NonvotingAuthority)
+		c.NonvotingAuthority["playground"] = &pConfig.NonvotingAuthority{}
+		c.NonvotingAuthority["playground"].Address = authority
+		c.NonvotingAuthority["playground"].PublicKey = authorityKey
+		c.Account = make([]*pConfig.Account, 1)
+		c.Account[0] = &pConfig.Account{User: user, Provider: provider,
+			ProviderKeyPin: providerKey, InsecureKeyDiscovery: true,
+			NonvotingAuthority: "playground"}
 	} else {
-		return []byte(fmt.Sprintf(configFormatStr, dataDir, authority, authorityKey, user, provider, providerKey))
+		c.VotingAuthority = make(map[string]*pConfig.VotingAuthority)
+		c.VotingAuthority["playground"] = &pConfig.VotingAuthority{}
+		c.VotingAuthority["playground"].Peers = authorities
+		c.Account = make([]*pConfig.Account, 1)
+		c.Account[0] = &pConfig.Account{User: user, Provider: provider,
+			ProviderKeyPin: providerKey, InsecureKeyDiscovery: true,
+			VotingAuthority: "playground"}
 	}
+	c.FixupAndValidate() // apply defaulted entries
+	if preferOnion {
+		c.UpstreamProxy = &pConfig.UpstreamProxy{PreferedTransports: []pki.Transport{"onion",}, Type: "tor+socks5", Network: socksAddr, Address: onionAuthority}
+	}
+	return c
 }
 
 // GenerateConfig is used to generate mailproxy configuration
@@ -83,7 +74,7 @@ func makeConfig(user, provider, providerKey, authority, onionAuthority, authorit
 // identity public key or an error upon failure. This function returns
 // the public keys so that they may be used with the Provider
 // account registration process.
-func GenerateConfig(user, provider, providerKey, authority, onionAuthority, authorityKey, dataDir, socksNet, socksAddr string, preferOnion bool) (*ecdh.PublicKey, *ecdh.PublicKey, error) {
+func GenerateConfig(user, provider, providerKey, authority, onionAuthority, authorityKey, dataDir, socksNet, socksAddr string, preferOnion bool, authorities []*vConfig.AuthorityPeer) (*ecdh.PublicKey, *ecdh.PublicKey, error) {
 	// Initialize the per-account directory.
 	user, err := precis.UsernameCaseMapped.String(user)
 	if err != nil {
@@ -110,10 +101,18 @@ func GenerateConfig(user, provider, providerKey, authority, onionAuthority, auth
 	}
 
 	// write the configuration file
-	configData := makeConfig(user, provider, providerKey, authority, onionAuthority, authorityKey, dataDir, socksNet, socksAddr, preferOnion)
-	configPath := filepath.Join(dataDir, mailproxyConfigName)
-	err = ioutil.WriteFile(configPath, configData, 0600)
+	pk := new(eddsa.PublicKey)
+	pk.FromString(providerKey)
+	ak := new(eddsa.PublicKey)
+	ak.FromString(authorityKey)
+	cfg := makeConfig(pk, ak, user, provider, authority, onionAuthority, dataDir, socksNet, socksAddr, preferOnion, authorities)
+	f, err := os.OpenFile(filepath.Join(dataDir, mailproxyConfigName), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+	enc := toml.NewEncoder(f)
+	if err := enc.Encode(cfg); err != nil {
 		return nil, nil, err
 	}
 	return linkPrivateKey.PublicKey(), identityPrivateKey.PublicKey(), nil
