@@ -32,6 +32,7 @@ import (
 	pConfig "github.com/katzenpost/mailproxy/config"
 	vConfig "github.com/katzenpost/authority/voting/server/config"
 	"golang.org/x/text/secure/precis"
+	"golang.org/x/net/idna"
 )
 
 const (
