@@ -31,6 +31,7 @@ import (
 	cConfig "github.com/katzenpost/client/config"
 	vConfig "github.com/katzenpost/authority/voting/server/config"
 	"golang.org/x/text/secure/precis"
+	"golang.org/x/net/idna"
 )
 
 const (
@@ -67,6 +68,11 @@ func makeConfig(providerKey *eddsa.PublicKey, authorityKey *eddsa.PublicKey, use
 func GenerateConfig(user, provider, providerKey, authority, onionAuthority, authorityKey, dataDir, socksNet, socksAddr string, preferOnion bool, authorities []*vConfig.AuthorityPeer) (*ecdh.PublicKey, *ecdh.PublicKey, error) {
 	// Initialize the per-account directory.
 	user, err := precis.UsernameCaseMapped.String(user)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	provider, err = idna.Lookup.ToASCII(provider)
 	if err != nil {
 		return nil, nil, err
 	}

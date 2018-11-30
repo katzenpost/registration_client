@@ -80,6 +80,10 @@ func GenerateConfig(user, provider, providerKey, authority, onionAuthority, auth
 	if err != nil {
 		return nil, nil, err
 	}
+	provider, err = idna.Lookup.ToASCII(provider)
+	if err != nil {
+		return nil, nil, err
+	}
 	id := fmt.Sprintf("%s@%s", user, provider)
 	basePath := filepath.Join(dataDir, id)
 	if err := utils.MkDataDir(basePath); err != nil {
